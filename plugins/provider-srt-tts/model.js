@@ -23,13 +23,16 @@ class FieldMapper {
   source = undefined;
   sourceKey = undefined;
 
-  constructor(source, sourceKey, name, type = TYPE.STRING, alias = undefined, length = undefined) {
+  mapper = undefined;
+
+  constructor(source, sourceKey, name, type = TYPE.STRING, alias = undefined, length = undefined, mapper = undefined) {
     this.name = name;
     this.type = type;
     this.alias = alias;
     this.length = length;
     this.source = source;
     this.sourceKey = sourceKey;
+    this.mapper = mapper;
   }
 
   mapValue(stations, ttsResponse, outputPropertiesObject) {
@@ -39,7 +42,8 @@ class FieldMapper {
     } else if (this.source === SOURCES.TTS) {
       source = ttsResponse;
     }
-    outputPropertiesObject[this.name] = source && source[this.sourceKey] ? source[this.sourceKey] : null;
+    const value = source && source[this.sourceKey] !== undefined ? source[this.sourceKey] : null;
+    outputPropertiesObject[this.name] = this.mapper ? this.mapper(value) : value;
   }
 
   getMetadata() {
@@ -50,7 +54,7 @@ class FieldMapper {
 class Model {
 
   stationsFeatures = {}
-  cacheExpirationMinutes = 2
+  cacheExpirationMinutes = 1
   fields = [];
 
   constructor() {
@@ -70,14 +74,18 @@ class Model {
     this.fields.push(new FieldMapper(SOURCES.TTS, 'to', 'destination_station_th', TYPE.STRING));
     this.fields.push(new FieldMapper(SOURCES.TTS, 'toen', 'destination_station_en', TYPE.STRING));
     this.fields.push(new FieldMapper(SOURCES.TTS, 'toch', 'destination_station_zh', TYPE.STRING));
-    this.fields.push(new FieldMapper(SOURCES.STATIONS, 'code', 'current_station_code', TYPE.INTEGER));
+    this.fields.push(new FieldMapper(SOURCES.STATIONS, 'code', 'current_station_code', TYPE.STRING, undefined, undefined, x => x.toString()));
     this.fields.push(new FieldMapper(SOURCES.STATIONS, 'name', 'current_station_th', TYPE.STRING));
     this.fields.push(new FieldMapper(SOURCES.STATIONS, 'name_en', 'current_station_en', TYPE.STRING));
     this.fields.push(new FieldMapper(SOURCES.STATIONS, 'name_zh', 'current_station_zh', TYPE.STRING));
-    this.fields.push(new FieldMapper(SOURCES.TTS, 'stop_no', 'current_sequence', TYPE.STRING));
+    this.fields.push(new FieldMapper(SOURCES.TTS, 'stopno', 'current_sequence', TYPE.STRING));
     this.fields.push(new FieldMapper(SOURCES.TTS, 'fullarrtime', 'arrived_time', TYPE.DATE));
+    this.fields.push(new FieldMapper(SOURCES.TTS, 'fullarrtime', 'arrived_time_str', TYPE.STRING, undefined, undefined, x => new Date(x).toISOString()));
     this.fields.push(new FieldMapper(SOURCES.TTS, 'fulldeptime', 'departed_time', TYPE.DATE));
+    this.fields.push(new FieldMapper(SOURCES.TTS, 'fulldeptime', 'departed_time_str', TYPE.STRING, undefined, undefined, x => new Date(x).toISOString()));
     this.fields.push(new FieldMapper(SOURCES.TTS, 'deplate', 'delay_minutes', TYPE.INTEGER));
+    this.fields.push(new FieldMapper(SOURCES.TTS, 'arrtime', 'stopped', TYPE.INTEGER, undefined, undefined, x => x !== 'ผ่าน' ? 1 : 0));
+    this.fields.push(new FieldMapper(SOURCES.TTS, 'deptime', 'ended', TYPE.INTEGER, undefined, undefined, x => x === 'ปลายทาง' ? 1 : 0));
   }
 
   getPrototypeGeojson() {
@@ -103,6 +111,8 @@ class Model {
       }
     }).then(response => {
       this.formatData(response.data.data, callback);
+    }).catch(error => {
+      callback(error);
     });
   }
 
