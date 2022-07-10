@@ -80,9 +80,9 @@ class Model {
     this.fields.push(new FieldMapper(SOURCES.STATIONS, 'name_zh', 'current_station_zh', TYPE.STRING));
     this.fields.push(new FieldMapper(SOURCES.TTS, 'stopno', 'current_sequence', TYPE.STRING));
     this.fields.push(new FieldMapper(SOURCES.TTS, 'fullarrtime', 'arrived_time', TYPE.DATE));
-    this.fields.push(new FieldMapper(SOURCES.TTS, 'fullarrtime', 'arrived_time_str', TYPE.STRING, undefined, undefined, x => new Date(x).toISOString()));
+    this.fields.push(new FieldMapper(SOURCES.TTS, 'fullarrtime', 'arrived_time_str', TYPE.STRING, undefined, undefined, x => new Date(x + '+07:00').toISOString()));
     this.fields.push(new FieldMapper(SOURCES.TTS, 'fulldeptime', 'departed_time', TYPE.DATE));
-    this.fields.push(new FieldMapper(SOURCES.TTS, 'fulldeptime', 'departed_time_str', TYPE.STRING, undefined, undefined, x => new Date(x).toISOString()));
+    this.fields.push(new FieldMapper(SOURCES.TTS, 'fulldeptime', 'departed_time_str', TYPE.STRING, undefined, undefined, x => new Date(x + '+07:00').toISOString()));
     this.fields.push(new FieldMapper(SOURCES.TTS, 'deplate', 'delay_minutes', TYPE.INTEGER));
     this.fields.push(new FieldMapper(SOURCES.TTS, 'arrtime', 'stopped', TYPE.INTEGER, undefined, undefined, x => x !== 'ผ่าน' ? 1 : 0));
     this.fields.push(new FieldMapper(SOURCES.TTS, 'deptime', 'ended', TYPE.INTEGER, undefined, undefined, x => x === 'ปลายทาง' ? 1 : 0));

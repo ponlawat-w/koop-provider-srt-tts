@@ -1,5 +1,7 @@
 const Koop = require('koop');
 
+process.env.TZ = 'Asia/Bangkok';
+
 const koop = new Koop();
 koop.register(require('./plugins/provider-test'));
 koop.register(require('./plugins/provider-srt-tts'));
