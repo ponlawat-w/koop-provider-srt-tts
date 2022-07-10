@@ -54,7 +54,7 @@ class FieldMapper {
 class Model {
 
   stationsFeatures = {}
-  cacheExpirationMinutes = 1
+  cacheExpirationSeconds = 30
   fields = [];
 
   constructor() {
@@ -96,10 +96,10 @@ class Model {
         description: 'ข้อมูลแปลงเชิงภูมิศาสตร์ของระบบรายงานติดตามขบวนรถ รฟท. โดยมีตำแหน่งขบวนรถอยู่ที่สถานี',
         geometryType: 'Point',
         idField: 'train_number',
-        expires: Date.now() + (this.cacheExpirationMinutes * 1000),
+        expires: Date.now() + (this.cacheExpirationSeconds * 1000),
         fields: this.fields.map(field => field.getMetadata())
       },
-      ttl: this.cacheExpirationMinutes,
+      ttl: this.cacheExpirationSeconds,
       features: []
     };
   }
