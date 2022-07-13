@@ -1,5 +1,3 @@
-const path = require('path');
-const fs = require('fs');
 const axios = require('axios').default;
 
 const SOURCES = {
@@ -58,11 +56,6 @@ class Model {
   fields = [];
 
   constructor() {
-    const stopsGeojson = JSON.parse(fs.readFileSync(path.join(__dirname, 'stations.geojson')));
-    for (const feature of stopsGeojson.features) {
-      this.stationsFeatures[parseInt(feature.properties.code)] = feature;
-    }
-
     this.fields.push(new FieldMapper(SOURCES.TTS, 'trains_no', 'train_number', TYPE.INTEGER));
     this.fields.push(new FieldMapper(SOURCES.TTS, 'train_type', 'type_th', TYPE.STRING));
     this.fields.push(new FieldMapper(SOURCES.TTS, 'train_type_eng', 'type_en', TYPE.STRING));
@@ -104,16 +97,31 @@ class Model {
     };
   }
 
-  getData(_, callback) {
-    axios.post('https://ttsview.railway.co.th/checktrain.php', new URLSearchParams({grant: 'user', train: 0, station: 0}).toString(), {
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
-      }
-    }).then(response => {
+  async fetchStations() {
+    if (Object.keys(this.stationsFeatures).length) {
+      return;
+    }
+    const url = process.env.STATIONS_LAYER ? process.env.STATIONS_LAYER :
+      'https://services5.arcgis.com/XDMGTTbkgKWI2WMY/ArcGIS/rest/services/%E0%B8%AA%E0%B8%96%E0%B8%B2%E0%B8%99%E0%B8%B5%E0%B9%81%E0%B8%A5%E0%B8%B0%E0%B9%80%E0%B8%AA%E0%B9%89%E0%B8%99%E0%B8%97%E0%B8%B2%E0%B8%87%E0%B9%80%E0%B8%94%E0%B8%B4%E0%B8%99%E0%B8%A3%E0%B8%96_%E0%B8%A3%E0%B8%9F%E0%B8%97/FeatureServer/6/query?f=geojson&where=1=1&outfields=*';
+    const response = await axios.get(url);
+    const geojson = response.data;
+    for (const feature of geojson.features) {
+      this.stationsFeatures[parseInt(feature.properties.code)] = feature;
+    }
+  }
+
+  async getData(_, callback) {
+    try {
+      await this.fetchStations();
+      const response = await axios.post('https://ttsview.railway.co.th/checktrain.php', new URLSearchParams({grant: 'user', train: 0, station: 0}).toString(), {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
+      });
       this.formatData(response.data.data, callback);
-    }).catch(error => {
+    } catch (error) {
       callback(error);
-    });
+    };
   }
 
   formatData(data, callback) {
