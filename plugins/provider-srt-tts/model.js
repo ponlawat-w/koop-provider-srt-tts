@@ -1,4 +1,5 @@
 const axios = require('axios').default;
+const authService = require('./auth');
 
 const SOURCES = {
   STATIONS: 1,
@@ -110,7 +111,20 @@ class Model {
     }
   }
 
-  async getData(_, callback) {
+  async checkAuth(request) {
+    const credentials = await this.authorize(request);
+    const user = authService(credentials.sub);
+    console.log(user);
+    if (!user || !user.services || user.services.indexOf('srt-tts') < 0) {
+      return false;
+    }
+    return true;
+  }
+
+  async getData(request, callback) {
+    if (process.env.KOOP_AUTH && !(await this.checkAuth(request))) {
+      return callback('Unauthorised user');
+    }
     try {
       await this.fetchStations();
       const response = await axios.post('https://ttsview.railway.co.th/checktrain.php', new URLSearchParams({grant: 'user', train: 0, station: 0}).toString(), {
