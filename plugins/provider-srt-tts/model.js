@@ -114,7 +114,6 @@ class Model {
   async checkAuth(request) {
     const credentials = await this.authorize(request);
     const user = authService(credentials.sub);
-    console.log(user);
     if (!user || !user.services || user.services.indexOf('srt-tts') < 0) {
       return false;
     }
@@ -124,6 +123,9 @@ class Model {
   async getData(request, callback) {
     if (process.env.KOOP_AUTH && !(await this.checkAuth(request))) {
       return callback('Unauthorised user');
+    }
+    if (request.params.id !== 'default') {
+      return callback('Unsupported id');
     }
     try {
       await this.fetchStations();

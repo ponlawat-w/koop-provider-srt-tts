@@ -1,12 +1,20 @@
 const Koop = require('koop');
+const cors = require('cors');
 
 process.env.TZ = 'Asia/Bangkok';
 
 const koop = new Koop();
+if (process.env.KOOP_CORS) {
+  koop.server.use(cors({
+    origin: process.env.KOOP_CORS,
+    credentials: true
+  }));
+}
+
 if (process.env.KOOP_AUTH) {
   koop.register(require('@koopjs/auth-direct-file')(process.env.KOOP_AUTH_SECRET, process.env.KOOP_AUTH_PATH, {
     tokenExpirationMinutes: 120,
-    useHttp: true
+    useHttp: false
   }));
 }
 koop.register(require('./plugins/provider-test'));

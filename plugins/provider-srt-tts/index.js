@@ -6,5 +6,5 @@ module.exports = {
   version: '0.0.0',
   Model: Model,
   hosts: false,
-  disableIdParam: true
+  disableIdParam: false
 };
