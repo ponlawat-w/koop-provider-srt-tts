@@ -1,5 +1,4 @@
 const axios = require('axios').default;
-const authService = require('./auth');
 
 const SOURCES = {
   STATIONS: 1,
@@ -111,21 +110,9 @@ class Model {
     }
   }
 
-  async checkAuth(request) {
-    const credentials = await this.authorize(request);
-    const user = authService(credentials.sub);
-    if (!user || !user.services || user.services.indexOf('srt-tts') < 0) {
-      return false;
-    }
-    return true;
-  }
-
   async getData(request, callback) {
-    if (process.env.KOOP_AUTH && !(await this.checkAuth(request))) {
-      return callback('Unauthorised user');
-    }
     if (request.params.id !== 'default') {
-      return callback('Unsupported id');
+      return callback({code: 400, message: 'Unsupported ID'});
     }
     try {
       await this.fetchStations();
@@ -166,8 +153,8 @@ class Model {
     callback(null, geojson);
   }
 
-  createKey() {
-    return 'SRT';
+  createKey(request) {
+    return `SRTTTS_${request.params.id}`;
   }
 }
 
