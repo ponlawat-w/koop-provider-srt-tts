@@ -39,10 +39,10 @@ class LineSegment {
     let coordinates = [];
     for (let i = 0; i < geometries.length; i++) {
       const geometry = geometries[i];
-
-      let geometryCoordinates = geometry.coordinates;
+      
+      let geometryCoordinates = [...geometry.coordinates];
       if (i > 0) {
-        geometryCoordinates.splice(1);
+        geometryCoordinates.splice(0, 1);
       }
       coordinates = [...coordinates, ...geometryCoordinates];
     }

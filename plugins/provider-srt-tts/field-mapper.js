@@ -1,5 +1,4 @@
-const SOURCES = require('./field-source');
-const TYPES = require('./field-type');
+const TYPE = require('./field-type');
 
 class FieldMapper {
   name = undefined;
@@ -22,13 +21,8 @@ class FieldMapper {
     this.mapper = mapper;
   }
 
-  mapValue(stations, ttsResponse, outputPropertiesObject) {
-    let source = undefined;
-    if (this.source === SOURCES.STATIONS) {
-      source = stations;
-    } else if (this.source === SOURCES.TTS) {
-      source = ttsResponse;
-    }
+  mapValue(sources, outputPropertiesObject) {
+    const source = sources[this.source];
     const value = source && source[this.sourceKey] !== undefined ? source[this.sourceKey] : null;
     outputPropertiesObject[this.name] = this.mapper ? this.mapper(value) : value;
   }

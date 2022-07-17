@@ -60,12 +60,9 @@ class Graph {
     const adjacencies = this.getAdjacencies(current).filter(x => path.indexOf(x) < 0);
     for (const adjacency of adjacencies) {
       if (adjacency === destination) {
-        return [...path, adjacency];
+        results.push([...path, adjacency]);
       }
-      const result = this.travelVertex(adjacency, destination, results, [...path, adjacency]);
-      if (result) {
-        results.push(result);
-      }
+      this.travelVertex(adjacency, destination, results, [...path, adjacency]);
     }
     return null;
   }
