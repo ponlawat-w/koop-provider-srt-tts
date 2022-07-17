@@ -13,6 +13,7 @@ if (process.env.KOOP_CORS) {
 }
 
 koop.register(require('./plugins/provider-test'));
+koop.register(require('./plugins/provider-srt'));
 koop.register(require('./plugins/provider-srt-tts'));
 
 const port = process.env.KOOP_PORT ? process.env.KOOP_PORT : 8080;
