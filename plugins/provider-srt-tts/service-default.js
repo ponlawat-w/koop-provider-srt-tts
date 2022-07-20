@@ -3,6 +3,7 @@ const axios = require('axios').default;
 const FieldMapper = require('./field-mapper');
 const SOURCES = require('./field-source');
 const TYPE = require('./field-type');
+const Train = require('./train');
 
 class DefaultService {
   static lastData = null;
@@ -14,6 +15,7 @@ class DefaultService {
   stationFeaturesDict = {};
 
   constructor(stations) {
+    this.fields.push(new FieldMapper(SOURCES.MANUAL, 'train_id', 'train_id', TYPE.INTEGER));
     this.fields.push(new FieldMapper(SOURCES.TTS_DEFAULT, 'trains_no', 'train_number', TYPE.INTEGER));
     this.fields.push(new FieldMapper(SOURCES.TTS_DEFAULT, 'rundate', 'date', TYPE.STRING));
     this.fields.push(new FieldMapper(SOURCES.TTS_DEFAULT, 'train_type', 'type_th', TYPE.STRING));
@@ -55,7 +57,7 @@ class DefaultService {
         name: 'ระบบรายงานติดตามขบวนรถ รฟท.',
         description: 'ข้อมูลแปลงเชิงภูมิศาสตร์ของระบบรายงานติดตามขบวนรถ รฟท. โดยมีตำแหน่งขบวนรถอยู่ที่สถานี',
         geometryType: 'Point',
-        idField: 'train_number',
+        idField: 'train_id',
         expires: Date.now() + (DefaultService.ttl * 1000),
         fields: this.fields.map(field => field.getMetadata())
       },
@@ -96,6 +98,9 @@ class DefaultService {
       }
 
       const sources = {
+        [SOURCES.MANUAL]: {
+          train_id: Train.getId(train.trains_no, train.rundate)
+        },
         [SOURCES.TTS_DEFAULT]: train,
         [SOURCES.STATIONS]: stationFeature.properties
       };

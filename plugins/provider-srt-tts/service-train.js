@@ -2,6 +2,7 @@ const Graph = require('../provider-srt/graph');
 const Segment = require('../provider-srt/segment');
 const FieldMapper = require('./field-mapper');
 const DefaultService = require('./service-default');
+const Train = require('./train');
 
 const SOURCES = require('./field-source');
 const TYPE = require('./field-type');
@@ -10,7 +11,6 @@ const { default: axios } = require('axios');
 class TrainService {
   static caches = {};
   static ttl = 60;
-
 
   stations = {};
   lines = {};
@@ -29,6 +29,7 @@ class TrainService {
     this.graph = new Graph(this.lines, this.stations);
     this.segment = new Segment(this.lines);
 
+    this.totalLineFields.push(new FieldMapper(SOURCES.MANUAL, 'train_id', 'train_id', TYPE.INTEGER));
     this.totalLineFields.push(new FieldMapper(SOURCES.TTS_DEFAULT, 'trains_no', 'train_number', TYPE.INTEGER));
     this.totalLineFields.push(new FieldMapper(SOURCES.TTS_DEFAULT, 'rundate', 'date', TYPE.STRING));
     this.totalLineFields.push(new FieldMapper(SOURCES.TTS_DEFAULT, 'train_type', 'type_th', TYPE.STRING));
@@ -42,7 +43,8 @@ class TrainService {
     this.totalLineFields.push(new FieldMapper(SOURCES.TTS_DEFAULT, 'toen', 'destination_station_en', TYPE.STRING));
     this.totalLineFields.push(new FieldMapper(SOURCES.TTS_DEFAULT, 'toch', 'destination_station_zh', TYPE.STRING));
 
-    this.pointFields.push(new FieldMapper(SOURCES.STATIONS, 'code', 'id', TYPE.INTEGER));
+    this.pointFields.push(new FieldMapper(SOURCES.STATIONS, 'code', 'station_code', TYPE.INTEGER));
+    this.pointFields.push(new FieldMapper(SOURCES.MANUAL, 'train_id', 'train_id', TYPE.INTEGER));
     this.pointFields.push(new FieldMapper(SOURCES.MANUAL, 'sequence', 'sequence', TYPE.INTEGER));
     this.pointFields.push(new FieldMapper(SOURCES.TTS_DEFAULT, 'trains_no', 'train_number', TYPE.INTEGER));
     this.pointFields.push(new FieldMapper(SOURCES.TTS_DEFAULT, 'rundate', 'date', TYPE.STRING));
@@ -63,7 +65,8 @@ class TrainService {
     this.pointFields.push(new FieldMapper(SOURCES.STATIONS, 'name_en', 'name_en', TYPE.STRING));
     this.pointFields.push(new FieldMapper(SOURCES.STATIONS, 'name_zh', 'name_zh', TYPE.STRING));
 
-    this.segmentFields.push(new FieldMapper(SOURCES.MANUAL, 'id', 'id', TYPE.INTEGER));
+    this.segmentFields.push(new FieldMapper(SOURCES.MANUAL, 'segment_id', 'segment_id', TYPE.INTEGER));
+    this.segmentFields.push(new FieldMapper(SOURCES.MANUAL, 'train_id', 'train_id', TYPE.INTEGER));
     this.segmentFields.push(new FieldMapper(SOURCES.MANUAL, 'train_number', 'train_number', TYPE.INTEGER));
     this.segmentFields.push(new FieldMapper(SOURCES.MANUAL, 'date', 'date', TYPE.STRING));
     this.segmentFields.push(new FieldMapper(SOURCES.MANUAL, 'from_code', 'from_code', TYPE.STRING));
@@ -76,73 +79,77 @@ class TrainService {
   }
 
   async getData(request, callback) {
-    const trainNumber = TrainService.getTrainNumber(request);
-    const date = TrainService.getDate(request);
-    const layer = request.params.layer ?? undefined;
-    if (!trainNumber || !date) {
-      switch (layer) {
-        case '0':
-          return callback(null, this.getTotalLineGeojsonTemplate());
-        case '1':
-          return callback(null, this.getPointsGeojsonTemplate());
-        case '2':
-          return callback(null, this.getSegmentsGeojsonTemplate());
+    const trainId = TrainService.getId(request);
+    const layer = parseInt(request.params.layer);
+    if (!trainId) {
+      if (isNaN(layer)) {
+        return callback(null, this.toFeatureServerResults(
+          this.getTotalLineGeojsonTemplate(),
+          this.getPointsGeojsonTemplate(),
+          this.getSegmentsGeojsonTemplate()
+        ));
       }
+      switch (layer) {
+        case 0:
+          return callback(null, this.getTotalLineGeojsonTemplate());
+        case 1:
+          return callback(null, this.getPointsGeojsonTemplate());
+        case 2:
+          return callback(null, this.getSegmentsGeojsonTemplate());
+        default:
+          return callback({code: 404, message: `Layer ${layer} not found`});
+      }
+    }
+
+    if (isNaN(layer)) {
       return callback(null, this.toFeatureServerResults(
-        this.getTotalLineGeojsonTemplate(),
-        this.getPointsGeojsonTemplate(),
-        this.getSegmentsGeojsonTemplate()
+        await this.getTotalLineGeojson(request, trainId),
+        await this.getPointsGeojson(request, trainId),
+        await this.getSegmentsGeojson(request, trainId)
       ));
     }
 
     switch (layer) {
-      case '0':
-        return callback(null, this.getTotalLineGeojson(request, trainNumber, date));
-      case '1':
-        return callback(null, this.getPointsGeojson(request, trainNumber, date));
-      case '2':
-        return callback(null, this.getSegmentsGeojson(request, trainNumber, date));
+      case 0:
+        return callback(null, this.getTotalLineGeojson(request, trainId));
+      case 1:
+        return callback(null, this.getPointsGeojson(request, trainId));
+      case 2:
+        return callback(null, this.getSegmentsGeojson(request, trainId));
     }
-
-    callback(null, this.toFeatureServerResults(
-      await this.getTotalLineGeojson(request, trainNumber, date),
-      await this.getPointsGeojson(request, trainNumber, date),
-      await this.getSegmentsGeojson(request, trainNumber, date)
-    ));
+    return callback({code: 404, message: `Layer ${layer} not found`});
   }
 
-  static async getTrainData(trainNumber, date) {
-    const cacheKey = `${trainNumber}-${date}`;
-    const cacheItem = TrainService.caches[cacheKey];
-    if (cacheItem) {
-
-    }
+  static async getTrainData(trainId) {
+    const cacheItem = TrainService.caches[trainId];
     if (cacheItem && new Date().getTime() - cacheItem.fetched.getTime() < (TrainService.ttl * 1000)) {
       return cacheItem.value;
     }
 
+    const { trainNumber, runDate } = Train.expandId(trainId);
+
     const response = await axios.post('https://ttsview.railway.co.th/checktrain.php', new URLSearchParams({
       grant: 'user',
       train: trainNumber,
-      date: date
+      date: runDate
     }).toString(), {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded'
       }
     });
     if (response.status === 200 && response.data) {
-      if (TrainService.caches[cacheKey]) {
-        TrainService.caches[cacheKey].fetched = new Date();
-        TrainService.caches[cacheKey].value = response.data;
+      if (TrainService.caches[trainId]) {
+        TrainService.caches[trainId].fetched = new Date();
+        TrainService.caches[trainId].value = response.data;
       } else {
-        TrainService.caches[cacheKey] = {
+        TrainService.caches[trainId] = {
           fetched: new Date(),
           value: response.data
         };
       }
     }
 
-    return TrainService.caches[cacheKey].value;
+    return TrainService.caches[trainId].value;
   }
 
   toFeatureServerResults(totalLineGeojson, pointsGeojson, segmentsGeojson) {
@@ -151,11 +158,12 @@ class TrainService {
     };
   }
 
-  async getTrainFromDefaultData(trainNumber, date) {
+  async getTrainFromDefaultData(trainId) {
+    const { trainNumber, runDate } = Train.expandId(trainId);
     const defaultData = await DefaultService.getLastData();
-    const trains = defaultData.filter(x => parseInt(x.trains_no) === parseInt(trainNumber) && x.rundate === date);
+    const trains = defaultData.filter(x => parseInt(x.trains_no) === parseInt(trainNumber) && x.rundate === runDate);
     if (!trains.length) {
-      const err = `Train ${trainNumber} on ${date} not found in default service`;
+      const err = `Train ${trainNumber} on ${runDate} not found in default service`;
       console.error(err);
       throw {code: 500, message: err};
     }
@@ -172,7 +180,9 @@ class TrainService {
     return stations[0];
   }
 
-  getTotalLineGeojsonTemplate(trainNumber = undefined) {
+  getTotalLineGeojsonTemplate(trainId = undefined) {
+    const { trainNumber } = Train.expandId(trainId);
+
     return {
       type: 'FeatureCollection',
       metadata: {
@@ -180,7 +190,7 @@ class TrainService {
         name: `เส้นทางขบวน${trainNumber ? ' ' + trainNumber : ''}`,
         description: `เส้นทางเดินรถขบวน${trainNumber ? ' ' + trainNumber : ''} ทั้งเส้นทาง`,
         geometryType: 'LineString',
-        idField: 'train_number',
+        idField: 'train_id',
         expires: Date.now() + (TrainService.ttl * 1000),
         fields: this.totalLineFields.map(field => field.getMetadata())
       },
@@ -189,7 +199,9 @@ class TrainService {
     };
   }
 
-  getPointsGeojsonTemplate(trainNumber = undefined) {
+  getPointsGeojsonTemplate(trainId = undefined) {
+    const { trainNumber } = Train.expandId(trainId);
+
     return {
       type: 'FeatureCollection',
       metadata: {
@@ -197,7 +209,7 @@ class TrainService {
         name: `จุดจอดขบวน${trainNumber ? ' ' + trainNumber : ''}`,
         description: `จุดจอดระหว่างทางของขบวน${trainNumber ? ' ' + trainNumber : ''}`,
         geometryType: 'Point',
-        idField: 'id',
+        idField: 'station_code',
         expires: Date.now() + (TrainService.ttl * 1000),
         fields: this.pointFields.map(field => field.getMetadata())
       },
@@ -206,7 +218,9 @@ class TrainService {
     };
   }
 
-  getSegmentsGeojsonTemplate(trainNumber = undefined) {
+  getSegmentsGeojsonTemplate(trainId = undefined) {
+    const { trainNumber } = Train.expandId(trainId);
+
     return {
       type: 'FeatureCollection',
       metadata: {
@@ -214,7 +228,7 @@ class TrainService {
         name: `เส้นทางระหว่างสถานีของขบวน${trainNumber ? ' ' + trainNumber : ''}`,
         description: `เส้นทางระหว่างสถานีของขบวน${trainNumber ? ' ' + trainNumber : ''}`,
         geometryType: 'LineString',
-        idField: 'id',
+        idField: 'segment_id',
         expires: Date.now() + (TrainService.ttl * 1000),
         fields: this.segmentFields.map(field => field.getMetadata())
       },
@@ -223,10 +237,10 @@ class TrainService {
     };
   }
 
-  async getTotalLineGeojson(_, trainNumber, date) {
-    const geojson = this.getTotalLineGeojsonTemplate(trainNumber);
+  async getTotalLineGeojson(_, trainId) {
+    const geojson = this.getTotalLineGeojsonTemplate(trainId);
 
-    const data = await TrainService.getTrainData(trainNumber, date);
+    const data = await TrainService.getTrainData(trainId);
     
     const segments = data.right.map((x, i) => i === 0 ? null : [data.right[i - 1].stcode, x.stcode]).filter(x => x);
     const paths = segments.map(function(od) { return this.graph.travel(od[0], od[1]); }.bind(this));
@@ -239,7 +253,8 @@ class TrainService {
     };
 
     const sources = {
-      [SOURCES.TTS_DEFAULT]: await this.getTrainFromDefaultData(trainNumber, date)
+      [SOURCES.MANUAL]: { train_id: trainId },
+      [SOURCES.TTS_DEFAULT]: await this.getTrainFromDefaultData(trainId)
     };
 
     for (const field of this.totalLineFields) {
@@ -251,16 +266,16 @@ class TrainService {
     return geojson;
   }
 
-  async getPointsGeojson(_, trainNumber, date) {
-    const geojson = this.getPointsGeojsonTemplate(trainNumber);
+  async getPointsGeojson(_, trainId) {
+    const geojson = this.getPointsGeojsonTemplate(trainId);
 
-    const defaultData = await this.getTrainFromDefaultData(trainNumber, date);
-    const trainData = await TrainService.getTrainData(trainNumber, date);
+    const defaultData = await this.getTrainFromDefaultData(trainId);
+    const trainData = await TrainService.getTrainData(trainId);
     
     let feature = undefined;
     let i = 0;
     for (const stopPoint of trainData.right) {
-      feature = this.stopPointToFeature(++i, trainData.left.starton, stopPoint, defaultData, feature);
+      feature = this.stopPointToFeature(trainId, ++i, trainData.left.starton, stopPoint, defaultData, feature);
       geojson.features.push(feature);
     }
 
@@ -270,7 +285,7 @@ class TrainService {
     return geojson;
   }
 
-  stopPointToFeature(i, startOn, stopPointData, defaultData, previousFeature) {
+  stopPointToFeature(trainId, i, startOn, stopPointData, defaultData, previousFeature) {
     const station = this.getStationFromCode(stopPointData.stcode);
 
     const previousScheduledDeparture = previousFeature ? previousFeature.properties.scheduled_departure : null;
@@ -308,6 +323,7 @@ class TrainService {
       [SOURCES.TTS_DEFAULT]: defaultData,
       [SOURCES.TTS_TRAIN]: stopPointData,
       [SOURCES.MANUAL]: {
+        train_id: trainId,
         sequence: i,
         scheduled_arrival: scheduledArrival,
         scheduled_departure: scheduledDeparture,
@@ -333,10 +349,12 @@ class TrainService {
     return feature;
   }
 
-  async getSegmentsGeojson(_, trainNumber, date) {
-    const geojson = this.getSegmentsGeojsonTemplate(trainNumber);
+  async getSegmentsGeojson(_, trainId) {
+    const geojson = this.getSegmentsGeojsonTemplate(trainId);
 
-    const trainData = await TrainService.getTrainData(trainNumber, date);
+    const { trainNumber, runDate } = Train.expandId(trainId);
+
+    const trainData = await TrainService.getTrainData(trainId);
     for (let i = 1; i < trainData.right.length; i++) {
       const previousStopPoint = trainData.right[i - 1];
       const stopPoint = trainData.right[i];
@@ -350,9 +368,10 @@ class TrainService {
 
       const sources = {
         [SOURCES.MANUAL]: {
-          id: i,
+          train_id: trainId,
+          segment_id: i,
           train_number: trainNumber,
-          date: date,
+          date: runDate,
           from_code: fromCode.toString(),
           to_code: toCode.toString(),
           passed: passed,
@@ -392,41 +411,28 @@ class TrainService {
     return new Date(startOnComponents[2], startOnComponents[1] - 1, startOnComponents[0], timeComponents[0], timeComponents[1], 0);
   }
 
-  static getTrainNumber(request) {
-    const idMatches = /^train::\d\d\-\d\d\-\d\d\d\d::(\d+)$/.exec(request.params.id);
-    if (idMatches) {
-      return parseInt(idMatches[1].toString());
+  static getId(request) {
+    const paramsIdComponents = request.params.id.split('::');
+    if (paramsIdComponents.length > 1) {
+      return parseInt(paramsIdComponents[1]);
     }
 
-    const where = request.query.where ? request.query.where : null;
-    const whereMatches = /train_number\s*=\s*(\d+)/g.exec(where);
-    if (!whereMatches) {
+    let where = request.query.where ?? '';
+    if (Array.isArray(where)) {
+      where = where.join(' AND ');
+    }
+
+    const matches = /train_id\s*=\s*(\d+)/g.exec(request.query.where ?? '');
+    if (!matches) {
       return undefined;
     }
-    const trainNumber = whereMatches[1].toString();
-    return trainNumber ? parseInt(trainNumber) : undefined;
-  }
-
-  static getDate(request) {
-    const idMatches = /^train::(\d\d\-\d\d\-\d\d\d\d)::\d+$/.exec(request.params.id);
-    if (idMatches) {
-      return idMatches[1].toString();
-    }
-
-    const where = request.query.where ? request.query.where : null;
-    const whereMatches = /date\s*=\s*[.'"](\d\d\-\d\d\-\d\d\d\d)[.'"]/g.exec(where);
-    if (!whereMatches) {
-      return undefined;
-    }
-    const date = whereMatches[1].toString();
-    return date ?? undefined;
+    return parseInt(matches[1].toString());
   }
 
   static createKey(request) {
-    const trainNumber = TrainService.getTrainNumber(request) ?? 0;
-    const date = TrainService.getDate(request) ?? '00-00-0000';
+    const trainId = TrainService.getId(request);
     const layer = request.params.layer ?? 'ALL';
-    return `SRTTTS_TRAIN_${trainNumber}_${date}_${layer}`;
+    return `SRTTTS_TRAIN_${trainId}_${layer}`;
   }
 }
 
