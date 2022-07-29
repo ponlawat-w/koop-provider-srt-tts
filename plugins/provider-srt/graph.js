@@ -1,3 +1,5 @@
+const turfDistance = require('@turf/distance').default;
+
 class Graph {
   network = {};
 
@@ -10,7 +12,7 @@ class Graph {
   getDistance(stations, code1, code2) {
     const station1 = stations.features.filter(f => f.properties.code === code1)[0];
     const station2 = stations.features.filter(f => f.properties.code === code2)[0];
-    return Math.abs(station1.properties.exact_km - station2.properties.exact_km);
+    return turfDistance(station1.geometry, station2.geometry, {units: 'meters'});
   }
 
   processFeature(feature, stations) {

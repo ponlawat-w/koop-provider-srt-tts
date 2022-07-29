@@ -1,8 +1,12 @@
+const turfDistance = require('@turf/distance').default;
+
 class LineSegment {
   linesGeojson = {};
+  stationsGeojson = {};
 
-  constructor(linesGeojson) {
+  constructor(linesGeojson, stationsGeojson) {
     this.linesGeojson = linesGeojson;
+    this.stationsGeojson = stationsGeojson;
   }
 
   getFeature(code1, code2) {
@@ -17,12 +21,12 @@ class LineSegment {
       properties: {
         ...feature.properties,
         code1: code2,
-        code2: code2
+        code2: code1
       },
       geometry: {
         ...feature.geometry,
         coordinates: feature.geometry.coordinates.map(x => x).reverse()
-      }
+    }
     };
   }
 
@@ -36,12 +40,21 @@ class LineSegment {
   }
 
   combineGeometries(geometries) {
+    const turfOptions = { units: 'kilometers' };
     let coordinates = [];
     for (let i = 0; i < geometries.length; i++) {
       const geometry = geometries[i];
       
       let geometryCoordinates = [...geometry.coordinates];
       if (i > 0) {
+        const currentFirstCoordinate = geometryCoordinates[0];
+        const currentLastCoordinate = geometryCoordinates[geometryCoordinates.length - 1];
+        const previousLastCoordinate = coordinates[coordinates.length - 1];
+
+        if (turfDistance(previousLastCoordinate, currentLastCoordinate, turfOptions) < turfDistance(previousLastCoordinate, currentFirstCoordinate, turfOptions)) {
+          geometryCoordinates.reverse();
+        }
+
         geometryCoordinates.splice(0, 1);
       }
       coordinates = [...coordinates, ...geometryCoordinates];
