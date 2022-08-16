@@ -6,8 +6,15 @@ process.env.TZ = 'Asia/Bangkok';
 const koop = new Koop();
 
 if (process.env.KOOP_CORS) {
+  const allowedCorigins = process.env.KOOP_CORS.split(',');
   koop.server.use(cors({
-    origin: process.env.KOOP_CORS,
+    origin: (origin, callback) => {
+      if (!origin || allowedCorigins.indexOf(origin) > -1) {
+        return callback(null, true);
+      } else {
+        callback('ERROR CORS');
+      }
+    },
     credentials: true
   }));
 }
