@@ -67,6 +67,7 @@ class DefaultService {
   }
 
   async getData(request, callback) {
+    DefaultService.updateInQueryParam(request);
     if (request.params.id !== 'default') {
       return callback({code: 400, message: 'Unsupported ID'});
     }
@@ -116,6 +117,16 @@ class DefaultService {
     callback(null, geojson);
   }
 
+  static updateInQueryParam(request) {
+    const matchesIn = /train_id\s+(IN|in|In|iN)\s*\(([\d\s,]+)\)/g.exec(request.query.where ?? '');
+    if (matchesIn) {
+      const ids = matchesIn[2].toString().split(',');
+      if (ids.length === 1) {
+        request.query.where = `train_id = ${ids[0]}`;
+      }
+    }
+  }
+
   static async loadData() {
     const response = await axios.post('https://ttsview.railway.co.th/checktrain.php', new URLSearchParams({grant: 'user', train: 0, station: 0}).toString(), {
       headers: {
@@ -135,6 +146,7 @@ class DefaultService {
   }
 
   static createKey(request) {
+    DefaultService.updateInQueryParam(request);
     return `SRTTTS_${request.params.id}`;
   }
 }
