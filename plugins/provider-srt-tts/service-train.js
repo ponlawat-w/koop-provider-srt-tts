@@ -422,11 +422,13 @@ class TrainService {
       where = where.join(' AND ');
     }
 
-    const matchesIn = /train_id\s+(IN|in|In|iN)\s*\(([\d\s,]+)\)/g.exec(request.query.where ?? '');
+    const matchesIn = /(.*)train_id\s+(IN|in|In|iN)\s*\(([\d\s,]+)\)(.*)/g.exec(request.query.where ?? '');
     if (matchesIn) {
-      const ids = matchesIn[2].toString().split(',');
+      const rest1 = matchesIn[1] ?? '';
+      const ids = matchesIn[3].toString().split(',');
+      const rest2 = matchesIn[4] ?? '';
       if (ids.length === 1) {
-        request.query.where = `train_id = ${ids[0]}`;
+        request.query.where = `${rest1}train_id = ${ids[0]}${rest2}`;
       }
     }
     const matchesEqual = /train_id\s*=\s*(\d+)/g.exec(request.query.where ?? '');
